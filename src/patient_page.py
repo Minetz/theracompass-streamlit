@@ -236,7 +236,7 @@ def patient_page(patient_id: str):  # noqa: C901, PLR0912, PLR0915
 
     # Trigger button above sessions list
     with stylable_container(key="new_session_btn", css_styles=YELLOW_BUTTON_STYLE):
-        if st.button("New Session", key="open_new_session"):
+        if st.button("Nuova Seduta", key="open_new_session"):
             new_session_dialog()
 
 
