@@ -1,0 +1,13 @@
+# Mac
+.DS_Store
+
+# Env
+.env
+
+# Virutal Env
+.venv
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
