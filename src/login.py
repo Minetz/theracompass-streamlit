@@ -1,6 +1,7 @@
 """Login and create users page."""
 
 import json
+import os
 
 import requests
 import streamlit as st
@@ -23,10 +24,33 @@ from styles import (
     YELLOW_BUTTON_STYLE,
 )
 
+ACCESS_CODE = os.getenv("TEST_PASSWORD", "")  # Codice di accesso letto da .env
 
 # main function to run the Streamlit app
 def login(user_id: str = ""):  # noqa: C901, PLR0915
     """Run the login."""
+    # Gate di accesso molto semplice per consentire la registrazione solo con permesso
+    if not st.session_state.get("access_granted"):
+        st.markdown(load_markdown("login_style.md"), unsafe_allow_html=True)
+        st.title("Accesso controllato")
+        col = st.columns([1, 1, 1])[1]
+        with col:
+            with stylable_container(key="access_code_card", css_styles=CARD_STYLE):
+                if not ACCESS_CODE:
+                    st.warning("Codice di accesso non configurato. Imposta TEST_PASSWORD nel file .env")
+                with stylable_container(key="access_code_input", css_styles=INPUT_STYLE):
+                    code = st.text_input("Codice di accesso", type="password", key="access_code_input_val")
+                st.markdown("<br>", unsafe_allow_html=True)
+                with stylable_container(key="access_code_btn", css_styles=YELLOW_BUTTON_STYLE):
+                    if st.button("Conferma", key="confirm_access_code", use_container_width=True):
+                        if code == ACCESS_CODE:
+                            st.session_state["access_granted"] = True
+                            st.success("Codice corretto")
+                            st.rerun()
+                        else:
+                            st.error("Codice non valido")
+        return
+
     init_firebase()
     if user_id:
         response = call_get_user_api(user_id)
