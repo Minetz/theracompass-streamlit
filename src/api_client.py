@@ -20,4 +20,9 @@ def auth_headers() -> dict[str, str]:
 
 def backend_url() -> str:
     """Return base URL for the backend service."""
-    return os.getenv("DEPLOYED_URL", "http://localhost:8000")
+    # Prefer Streamlit secrets; fallback to environment variable
+    return (
+        st.secrets.get("DEPLOYED_URL")
+        if hasattr(st, "secrets") and "DEPLOYED_URL" in st.secrets
+        else os.getenv("DEPLOYED_URL", "http://localhost:8000")
+    )

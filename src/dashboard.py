@@ -9,7 +9,9 @@ from pathlib import Path
 
 import streamlit as st
 
-DEFAULT_LOG_DIR = Path(os.getenv("LOG_DIR", "logs"))
+DEFAULT_LOG_DIR = Path(
+    st.secrets.get("LOG_DIR") if hasattr(st, "secrets") and "LOG_DIR" in st.secrets else os.getenv("LOG_DIR", "logs")
+)
 
 
 def iter_log_dirs(base: Path) -> Iterable[Path]:

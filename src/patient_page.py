@@ -31,7 +31,11 @@ def call_transcription_api(
         # Split file name into name and extension
         name_without_ext, extension = os.path.splitext(uploaded_audio_name)
         # Get test_audio_dir from environment variable
-        test_audio_dir = os.getenv("TEST_AUDIO_DIR")
+        test_audio_dir = (
+            st.secrets.get("TEST_AUDIO_DIR")
+            if hasattr(st, "secrets") and "TEST_AUDIO_DIR" in st.secrets
+            else os.getenv("TEST_AUDIO_DIR")
+        )
         if not test_audio_dir:
             raise ValueError("Missing environment variable TEST_AUDIO_DIR")
         if not os.path.isdir(test_audio_dir):
@@ -175,8 +179,15 @@ def patient_page(patient_id: str):  # noqa: C901, PLR0912, PLR0915
         # Card style inside dialog
         with stylable_container(key="new_session_card", css_styles=CARD_STYLE):
             # Demo / file selection (keeps existing logic)
-            if os.getenv("MODE") == "demo":
-                demo_dir = os.getenv("TEST_AUDIO_DIR") or ""
+            if (
+                (st.secrets.get("MODE") if hasattr(st, "secrets") else os.getenv("MODE"))
+                == "demo"
+            ):
+                demo_dir = (
+                    st.secrets.get("TEST_AUDIO_DIR")
+                    if hasattr(st, "secrets") and "TEST_AUDIO_DIR" in st.secrets
+                    else os.getenv("TEST_AUDIO_DIR") or ""
+                )
                 audio_files: list[str] = []
                 if not demo_dir:
                     st.error("TEST_AUDIO_DIR non è impostata. Definiscila nel file .env.")

@@ -15,6 +15,7 @@ from typing import Any
 
 import requests
 from dotenv import load_dotenv
+import streamlit as st
 from firebase_admin import auth, credentials
 import logging
 
@@ -27,15 +28,27 @@ if not logger.handlers:
     handler.setFormatter(formatter)
     logger.addHandler(handler)
 logger.setLevel(logging.DEBUG)
-FIREBASE_API_KEY = os.getenv("FIREBASE_API_KEY", "")
+# Prefer Streamlit secrets with env fallback
+FIREBASE_API_KEY = (
+    st.secrets.get("FIREBASE_API_KEY")
+    if hasattr(st, "secrets") and "FIREBASE_API_KEY" in st.secrets
+    else os.getenv("FIREBASE_API_KEY", "")
+)
 
 # Toggle between local filesystem and Firebase based on SAVE_MODE
-SAVE_MODE = os.getenv("SAVE_MODE", "local").lower()
+SAVE_MODE = (
+    (st.secrets.get("SAVE_MODE") or os.getenv("SAVE_MODE", "local"))
+    if hasattr(st, "secrets")
+    else os.getenv("SAVE_MODE", "local")
+).lower()
 
 # Simple in-memory cache for verified tokens to avoid repeated calls to
 # Firebase when the same token is reused. Cache entries expire either when
 # the token's own expiry passes or after ``TOKEN_CACHE_TTL`` seconds.
-TOKEN_CACHE_TTL = int(os.getenv("TOKEN_CACHE_TTL", "300"))
+TOKEN_CACHE_TTL = int(
+    (st.secrets.get("TOKEN_CACHE_TTL") if hasattr(st, "secrets") else None)
+    or os.getenv("TOKEN_CACHE_TTL", "300")
+)
 _TOKEN_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
 
 # Basic diagnostics (non-secret)
@@ -66,8 +79,17 @@ def init_firebase(
     except ValueError:
         pass
 
-    cred_path = credential_path or os.getenv("FIREBASE_CREDENTIALS")
-    project_id = os.getenv("FIREBASE_PROJECT_ID") or os.getenv("GOOGLE_CLOUD_PROJECT") or ""
+    cred_path = credential_path or (
+        st.secrets.get("FIREBASE_CREDENTIALS")
+        if hasattr(st, "secrets") and "FIREBASE_CREDENTIALS" in st.secrets
+        else os.getenv("FIREBASE_CREDENTIALS")
+    )
+    project_id = (
+        (st.secrets.get("FIREBASE_PROJECT_ID") if hasattr(st, "secrets") else None)
+        or os.getenv("FIREBASE_PROJECT_ID")
+        or os.getenv("GOOGLE_CLOUD_PROJECT")
+        or ""
+    )
     logger.debug(
         "init_firebase: project_id=%s, creds_path_set=%s",
         project_id or "(none)",

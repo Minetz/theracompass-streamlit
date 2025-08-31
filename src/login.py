@@ -24,7 +24,11 @@ from styles import (
     YELLOW_BUTTON_STYLE,
 )
 
-ACCESS_CODE = os.getenv("TEST_PASSWORD", "")  # Codice di accesso letto da .env
+ACCESS_CODE = (
+    st.secrets.get("TEST_PASSWORD")
+    if hasattr(st, "secrets") and "TEST_PASSWORD" in st.secrets
+    else os.getenv("TEST_PASSWORD", "")
+)
 
 # main function to run the Streamlit app
 def login(user_id: str = ""):  # noqa: C901, PLR0915

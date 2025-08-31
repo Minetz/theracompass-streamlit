@@ -3,7 +3,7 @@
 
 # Env
 .env
-
+secrets.toml
 # Virutal Env
 .venv
 
