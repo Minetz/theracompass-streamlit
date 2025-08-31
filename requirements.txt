@@ -3,3 +3,4 @@ requests
 streamlit
 streamlit-extras
 dotenv
+firebase_admin
