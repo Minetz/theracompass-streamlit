@@ -24,26 +24,22 @@ from styles import (
 
 
 def call_transcription_api(
-    user_id: str, patient_id: str, uploaded_audio_name: str, session_datetime: str
+    user_id: str,
+    patient_id: str,
+    uploaded_audio_name: str,
+    session_datetime: str,
+    framework: str,
 ) -> dict:
     """Call the FastAPI process_audio endpoint with uploaded audio and user ID."""
     try:
         # Split file name into name and extension
         name_without_ext, extension = os.path.splitext(uploaded_audio_name)
         # Get test_audio_dir from environment variable
-        test_audio_dir = (
-            st.secrets.get("TEST_AUDIO_DIR")
-            if hasattr(st, "secrets") and "TEST_AUDIO_DIR" in st.secrets
-            else os.getenv("TEST_AUDIO_DIR")
-        )
+        test_audio_dir = os.getenv("TEST_AUDIO_DIR")
         if not test_audio_dir:
-            raise ValueError("Missing environment variable TEST_AUDIO_DIR")
-        if not os.path.isdir(test_audio_dir):
-            raise FileNotFoundError(f"Invalid TEST_AUDIO_DIR, directory not found: {test_audio_dir}")
+            raise ValueError("Missing environment variable: test_audio_dir")
         # Open the audio file and fill in the files data
         audio_path = os.path.join(test_audio_dir, uploaded_audio_name)
-        if not os.path.isfile(audio_path):
-            raise FileNotFoundError(f"Audio file not found: {audio_path}")
         with open(audio_path, "rb") as audio_file:
             uploaded_audio = audio_file.read()
         # Prepare the audio file and form data to send to the API
@@ -52,6 +48,7 @@ def call_transcription_api(
             "user_id": user_id,
             "patient_id": patient_id,
             "session_datetime": session_datetime,
+            "framework": framework,
         }
 
         # Send POST request to the process_audio endpoint
@@ -66,9 +63,6 @@ def call_transcription_api(
     except requests.RequestException as e:
         # Catch and return any API or connection error
         return {"error": str(e)}
-    except Exception as e:
-        # Surface local validation errors clearly to the UI
-        return {"error": str(e)}
 
 
 def get_transcription_api_call(transcription_id: str) -> dict:
@@ -76,6 +70,20 @@ def get_transcription_api_call(transcription_id: str) -> dict:
     try:
         response = requests.get(
             f"{backend_url()}/get_transcription",
+            params={"transcription_id": transcription_id},
+            headers=auth_headers(),
+        )
+        response.raise_for_status()
+        return json.loads(response.json())
+    except requests.RequestException as e:
+        return {"error": str(e)}
+    
+
+def get_framework_summary_api_call(transcription_id: str) -> dict:
+    """Fetch the framework-based summary for a session."""
+    try:
+        response = requests.get(
+            f"{backend_url()}/get_framework_summary",
             params={"transcription_id": transcription_id},
             headers=auth_headers(),
         )
@@ -233,6 +241,7 @@ def patient_page(patient_id: str):  # noqa: C901, PLR0912, PLR0915
                             patient_id=patient_id,
                             uploaded_audio_name=selected_audio,
                             session_datetime=session_datetime,
+                            framework=patient.get("framework", "")
                         )
                         st.session_state["response"] = json.loads(
                             call_get_user_api(st.session_state["user_id"])  # refresh
@@ -289,6 +298,11 @@ def patient_page(patient_id: str):  # noqa: C901, PLR0912, PLR0915
                             if dt_str
                             else "N/A"
                         )
+                        summary = get_framework_summary_api_call(session_id)
+                        summary_text = summary.get("summary") if "error" not in summary else None
+                        framework_name = (
+                            summary.get("framework") if "error" not in summary else None
+                        )
                         with (
                             stylable_container(
                                 key=f"session_card_{session_id}",
@@ -300,6 +314,16 @@ def patient_page(patient_id: str):  # noqa: C901, PLR0912, PLR0915
                             ),
                         ):
                             st.write(f"ID: {session_id}")
+                            if summary_text:
+                                title = (
+                                    f"Riassunto con framework {framework_name}"
+                                    if framework_name
+                                    else "Riassunto con framework"
+                                )
+                                st.markdown(f"**{title}**")
+                                st.markdown(summary_text)
+                            else:
+                                st.write("No summary available.")
                             sc1, sc2 = st.columns(2)
                             sc1.metric("Words", stats["word_count"])
                             sc2.metric("Duration (s)", round(stats["duration"], 1))

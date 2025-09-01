@@ -6,6 +6,8 @@ import requests
 import streamlit as st
 from streamlit_extras.stylable_container import stylable_container
 
+from framework_summary import TherapyFramework
+
 from api_client import auth_headers, backend_url
 from login import call_get_user_api
 from markdown_loader import load_markdown
@@ -17,13 +19,17 @@ from styles import (
 )
 
 
-def call_new_patient(user_id: str, patient_name: str) -> dict:
+def call_new_patient(user_id: str, patient_name: str, framework: TherapyFramework) -> dict:
     """Call the FastAPI create_patient endpoint to create a new patient."""
     try:
         # Send POST request to the create_patient endpoint with user_id and patient_name
         response = requests.post(
             f"{backend_url()}/create_patient",
-            data={"user_id": user_id, "patient_name": patient_name},
+            data={
+                "user_id": user_id,
+                "patient_name": patient_name,
+                "framework": framework.value,
+            },
             headers=auth_headers(),
         )
         response.raise_for_status()
@@ -87,28 +93,36 @@ def home_page():  # noqa: C901, PLR0915
                         st.session_state["selected_patient_id"] = patient["patient_id"]
                         st.rerun()
 
-    @st.dialog("Nuovo paziente")
+    @st.dialog("-")
     def new_patient_dialog():
         with stylable_container(key="modale", css_styles=CARD_STYLE):
             # Small space
             st.markdown("<br>", unsafe_allow_html=True)
             with stylable_container(key="modale_patient_name", css_styles=INPUT_STYLE):
-                name = st.text_input("Nome paziente", key="patient_name_modal")
+                name = st.text_input("Patient Name", key="patient_name_modal")
+            # Framework selection
+            with stylable_container(key="modale_framework", css_styles=INPUT_STYLE):
+                framework = st.selectbox(
+                    "Therapy Framework",
+                    list(TherapyFramework),
+                    format_func=lambda f: f.name.upper(),
+                    key="framework_modal",
+                )
             # Small space
             st.markdown("<br>", unsafe_allow_html=True)
             with stylable_container(
                 key="modale_new_patient_button",
                 css_styles=YELLOW_BUTTON_STYLE,
             ):
-                create_clicked = st.button("Crea", key="create_patient_modal")
+                create_clicked = st.button("Create", key="create_patient_modal")
 
             if create_clicked:
                 if name:
-                    resp = call_new_patient(user_id, name)
+                    resp = call_new_patient(user_id, name, framework)
                     if "error" in resp:
-                        st.error(f"Errore durante la creazione del paziente: {resp['error']}")
+                        st.error(f"Error creating patient: {resp['error']}")
                     else:
-                        st.success(f"Paziente '{name}' creato con successo!")
+                        st.success(f"Patient '{name}' created successfully!")
                         # Refresh user data
                         refreshed = call_get_user_api(user_id)
                         st.session_state["response"] = (
@@ -116,9 +130,9 @@ def home_page():  # noqa: C901, PLR0915
                         )
                         st.rerun()  # closes the dialog per docs
                 else:
-                    st.error("Inserisci il nome del paziente.")
+                    st.error("Please enter a patient name.")
 
     # New Patient button (opens modal)
     with stylable_container(key="new_patient_btn", css_styles=YELLOW_BUTTON_STYLE):
-        if st.button("Nuovo paziente", key="open_new_patient"):
+        if st.button("New Patient", key="open_new_patient"):
             new_patient_dialog()

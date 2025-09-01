@@ -4,3 +4,4 @@ streamlit
 streamlit-extras
 dotenv
 firebase_admin
+pydantic
