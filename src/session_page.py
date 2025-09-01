@@ -172,34 +172,28 @@ def display_grouped_chat(transcript, epi_summary):
         with stylable_container(key=f"summary_card_{idx}", css_styles=CARD_STYLE):
             st.markdown(template.format(summary_text=summary_text))
             with st.expander("Mostra conversazione correlata", expanded=False):
-                # Build a single markdown string with words colored by speaker
-                def _esc(word: str) -> str:
-                    for ch in ["\\", "]", "["]:
-                        word = word.replace(ch, f"\\{ch}")
-                    return word
-
-                colored_parts: list[str] = []
+                # Render grouped messages as chat bubbles instead of colored text
                 start_idx = current_index
                 while current_index < len(groups):
                     group = groups[current_index]
                     group_end = group.get("end_time", 0)
                     if group_end and group_end > end_time:
                         break
+
                     speaker = str(group.get("speaker", "")).lower()
-                    # st.write(
-                    #    f"Speaker: {speaker} | Start: {group.get('start_time', 'N/A')} |
-                    # End: {group_end}"
-                    # )
-                    color = "blue" if "therap" in speaker else "green"
+                    role = "assistant" if "therap" in speaker else "user"
+                    avatar = "🧑‍⚕️" if role == "assistant" else "👤"
                     text = group.get("text", "")
-                    for raw in text.split():
-                        colored_parts.append(f":{color}[{_esc(raw)}]")  # noqa: PERF401
+
+                    with st.chat_message(role, avatar=avatar):
+                        # Optionally show who is speaking if speaker ids are meaningful
+                        # st.caption(group.get("speaker", ""))
+                        st.write(text)
+
                     current_index += 1
 
                 if current_index == start_idx:
                     st.write("Nessuna conversazione per questo riassunto.")
-                else:
-                    st.markdown(" ".join(colored_parts))
 
 
 def session_page(session_id: str):

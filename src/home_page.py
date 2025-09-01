@@ -66,6 +66,14 @@ def home_page():  # noqa: C901, PLR0915
 
     else:
         st.error("Non hai effettuato l'accesso. Accedi prima.")
+        return
+
+    # Ensure user response exists in session state
+    if "response" not in st.session_state or not st.session_state["response"]:
+        refreshed = call_get_user_api(user_id)
+        st.session_state["response"] = (
+            refreshed if isinstance(refreshed, dict) else json.loads(refreshed)
+        )
 
     # Display patients
     with stylable_container(key="patient_list", css_styles=CARD_STYLE):
@@ -73,10 +81,21 @@ def home_page():  # noqa: C901, PLR0915
         st.subheader("I tuoi pazienti")
 
         # Display each patient as an expander
-        if type(st.session_state["response"]) is str:
-            st.session_state["response"] = json.loads(st.session_state["response"])
+        resp = st.session_state.get("response")
+        if isinstance(resp, str):
+            try:
+                resp = json.loads(resp)
+                st.session_state["response"] = resp
+            except Exception:
+                st.error("Formato dati utente non valido.")
+                return
+
+        if not isinstance(resp, dict):
+            st.error("Dati utente mancanti o non validi.")
+            return
+
         # Check if response contains patient data
-        patients = st.session_state["response"]["patient_dir"]
+        patients = resp.get("patient_dir", {}) or {}
         for patient in patients.values():
             with (
                 stylable_container(key=patient["name"], css_styles=CARD_STYLE),
