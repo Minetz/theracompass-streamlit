@@ -1,0 +1,13 @@
+[server]
+# Avoid Linux inotify watcher limits in managed environments
+fileWatcherType = "none"
+
+# Optional: prevent scanning heavy folders if watcher is re-enabled
+folderWatchBlacklist = [
+  ".venv",
+  "env",
+  "data",
+  "node_modules",
+  ".git"
+]
+
