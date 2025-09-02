@@ -79,11 +79,24 @@ def init_firebase(
     except ValueError:
         pass
 
-    cred_path = credential_path or (
-        st.secrets.get("FIREBASE_CREDENTIALS")
-        if hasattr(st, "secrets") and "FIREBASE_CREDENTIALS" in st.secrets
-        else os.getenv("FIREBASE_CREDENTIALS")
-    )
+    # Read credentials from multiple sources:
+    # - explicit credential_path argument
+    # - Streamlit secrets: either FIREBASE_CREDENTIALS (JSON string or path) or
+    #   a structured table at firebase_credentials = { ... }
+    # - Environment variable FIREBASE_CREDENTIALS (JSON string or path)
+    cred_source: str | dict | None = None
+    if credential_path:
+        cred_source = str(credential_path)
+    else:
+        if hasattr(st, "secrets"):
+            if "firebase_credentials" in st.secrets:
+                cred_source = dict(st.secrets.get("firebase_credentials"))
+            elif "FIREBASE_CREDENTIALS" in st.secrets:
+                cred_source = st.secrets.get("FIREBASE_CREDENTIALS")
+        if cred_source is None:
+            cred_env = os.getenv("FIREBASE_CREDENTIALS")
+            if cred_env:
+                cred_source = cred_env
     project_id = (
         (st.secrets.get("FIREBASE_PROJECT_ID") if hasattr(st, "secrets") else None)
         or os.getenv("FIREBASE_PROJECT_ID")
@@ -95,18 +108,38 @@ def init_firebase(
         project_id or "(none)",
         bool(cred_path),
     )
-    if cred_path:
+    # Best-effort logging of credential source
+    if isinstance(cred_source, str):
         try:
-            exists = Path(str(cred_path)).exists()
-            logger.debug("init_firebase: credential_path=%s exists=%s", cred_path, exists)
+            exists = Path(cred_source).exists()
+            logger.debug("init_firebase: credential_path=%s exists=%s", cred_source, exists)
         except Exception as e:
-            logger.warning("init_firebase: could not stat credential_path=%s: %s", cred_path, e)
+            logger.debug("init_firebase: credential_path check failed: %s", e)
 
     try:
         cred: credentials.Base
-        if cred_path:
-            cred = credentials.Certificate(str(cred_path))
-            firebase_admin.initialize_app(cred, {"projectId": project_id} if project_id else None)
+        if cred_source is not None:
+            # If the source is a dict or a JSON string, build Certificate from it.
+            cert_payload: dict | None = None
+            if isinstance(cred_source, dict):
+                cert_payload = cred_source
+            elif isinstance(cred_source, str):
+                try:
+                    # Try JSON parse first
+                    cert_payload = json.loads(cred_source)
+                except Exception:
+                    cert_payload = None
+            if cert_payload:
+                cred = credentials.Certificate(cert_payload)
+                firebase_admin.initialize_app(cred, {"projectId": project_id} if project_id else None)
+            elif isinstance(cred_source, str):
+                # Fallback: treat as filesystem path
+                cred = credentials.Certificate(cred_source)
+                firebase_admin.initialize_app(cred, {"projectId": project_id} if project_id else None)
+            else:
+                # Last resort
+                cred = credentials.ApplicationDefault()
+                firebase_admin.initialize_app(cred, {"projectId": project_id} if project_id else None)
         else:
             cred = credentials.ApplicationDefault()
             firebase_admin.initialize_app(cred, {"projectId": project_id} if project_id else None)
@@ -114,6 +147,30 @@ def init_firebase(
     except Exception as e:
         logger.exception("init_firebase failed: %s", e)
         print(f"init_firebase failed: {type(e).__name__}: {e}")
+        raise
+
+
+def _create_user_via_rest(email: str, password: str) -> str:
+    """Create a Firebase user using REST (no admin credentials required).
+
+    Requires ``FIREBASE_API_KEY``. Returns the created user's UID (localId).
+    """
+    if not FIREBASE_API_KEY:
+        raise RuntimeError(
+            "FIREBASE_API_KEY is required for REST sign-up fallback."
+        )
+    url = (
+        "https://identitytoolkit.googleapis.com/v1/accounts:signUp?key="
+        f"{FIREBASE_API_KEY}"
+    )
+    payload = {"email": email, "password": password, "returnSecureToken": True}
+    try:
+        response = requests.post(url, json=payload, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        return data.get("localId")
+    except requests.RequestException as e:
+        logger.exception("REST signUp failed for %s: %s", email, e)
         raise
 
 
@@ -133,22 +190,35 @@ def create_user(email: str, password: str) -> str:
         The created user's UID.
     """
     try:
+        # Ensure Admin app is initialised; if not, we try to init.
+        import firebase_admin as _fb
+        try:
+            _fb.get_app()
+        except ValueError:
+            init_firebase()
+
         user = auth.create_user(email=email, password=password)
-        save_user_json(
-            user.uid,
-            {
-                "username": email,
-                "email": email,
-                "user_id": user.uid,
-                "user_subscription": "free",
-                "patient_dir": {},
-            },
+        uid = user.uid
+    except Exception as e:  # Admin path failed (likely missing project/creds); try REST fallback
+        logger.warning(
+            "Admin create_user failed for %s (%s). Falling back to REST sign-up.",
+            email,
+            e,
         )
-        return user.uid
-    except Exception as e:
-        logger.exception("create_user failed for %s: %s", email, e)
-        print(f"create_user failed for {email}: {type(e).__name__}: {e}")
-        raise
+        uid = _create_user_via_rest(email, password)
+
+    # Persist initial user document (local or Firestore depending on SAVE_MODE)
+    save_user_json(
+        uid,
+        {
+            "username": email,
+            "email": email,
+            "user_id": uid,
+            "user_subscription": "free",
+            "patient_dir": {},
+        },
+    )
+    return uid
 
 
 def verify_id_token(id_token: str) -> dict[str, Any]:
