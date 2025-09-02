@@ -104,9 +104,9 @@ def init_firebase(
         or ""
     )
     logger.debug(
-        "init_firebase: project_id=%s, creds_path_set=%s",
+        "init_firebase: project_id=%s, creds_source_set=%s",
         project_id or "(none)",
-        bool(cred_path),
+        bool(cred_source),
     )
     # Best-effort logging of credential source
     if isinstance(cred_source, str):
@@ -143,7 +143,10 @@ def init_firebase(
         else:
             cred = credentials.ApplicationDefault()
             firebase_admin.initialize_app(cred, {"projectId": project_id} if project_id else None)
-        logger.debug("init_firebase: initialized app using %s", "service account" if cred_path else "ADC")
+        logger.debug(
+            "init_firebase: initialized app using %s",
+            "service account" if cred_source is not None else "ADC",
+        )
     except Exception as e:
         logger.exception("init_firebase failed: %s", e)
         print(f"init_firebase failed: {type(e).__name__}: {e}")
