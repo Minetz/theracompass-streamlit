@@ -180,8 +180,20 @@ def display_grouped_chat(transcript, epi_summary):
                     if group_end and group_end > end_time:
                         break
 
-                    speaker = str(group.get("speaker", "")).lower()
-                    role = "assistant" if "therap" in speaker else "user"
+                    raw_speaker = str(group.get("speaker", ""))
+                    speaker = raw_speaker.lower()
+
+                    # Map common tags to chat roles
+                    # - therapist → assistant
+                    # - patient  → user
+                    # - SPEAKER_1 → assistant, SPEAKER_0 → user
+                    if "speaker_1" in speaker or speaker.endswith("_1") or "therap" in speaker:
+                        role = "assistant"
+                    elif "speaker_0" in speaker or speaker.endswith("_0") or "patient" in speaker:
+                        role = "user"
+                    else:
+                        role = "user"
+
                     avatar = "🧑‍⚕️" if role == "assistant" else "👤"
                     text = group.get("text", "")
 
